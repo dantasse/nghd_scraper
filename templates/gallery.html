@@ -1,0 +1,20 @@
+<!doctype HTML>
+<html>
+  <head>
+    <script src='js/jquery-2.2.0.js'></script>
+    <script src='js/jquery.justifiedGallery.js'></script>
+    <link rel="stylesheet" href="css/justifiedGallery.css" />
+  </head>
+  <body>
+    <div id="gallery">
+      {% for url in urls %}
+      <a href="{{url}}">
+        <img src="{{url}}" />
+      </a>
+      {% endfor %}
+    </div>
+    <script>
+      $("#gallery").justifiedGallery();
+    </script>
+  </body>
+</html>
