@@ -19,7 +19,7 @@ if __name__ == '__main__':
         if nghd['properties']['name'].lower() == args.target_neighborhood.lower():
             nghd_of_interest = nghd
             nghd_geom = geometry.asShape(nghd_of_interest['geometry'])
-            bbox = str(nghd_geom.bounds)[1:-1]
+            bbox = str([round(b, 6) for b in nghd_geom.bounds])[1:-1]
             print nghd['properties']['name']
             print bbox
  

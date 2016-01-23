@@ -19,4 +19,6 @@ def load_neighborhoods(filename):
     for nghd in nghds['features']:
         if 'neighborho' in nghd['properties']:
             nghd['properties']['name'] = nghd['properties']['neighborho']
+        if 'hood' in nghd['properties']:
+            nghd['properties']['name'] = nghd['properties']['hood']
     return nghds['features']

@@ -51,7 +51,7 @@ if __name__=='__main__':
             nghd_of_interest = nghd
 
     nghd_geom = geometry.asShape(nghd_of_interest['geometry'])
-    bbox = str(nghd_geom.bounds)[1:-1]
+    bbox = str([round(b, 6) for b in nghd_geom.bounds])[1:-1]
     # 4-tuple: (min lon, min lat, max lon, max lat). [1:-1] to remove parentheses.
     # recent_photos = flickr_api.Photo.search(bbox=bbox, sort='date-taken-desc')
     recent_photos = flickr_api.Walker(flickr_api.Photo.search, bbox=bbox, sort='date-taken-desc')
@@ -73,7 +73,7 @@ if __name__=='__main__':
         if photo['owner']['id'] not in recent_ids_seen:
             recent_ids_seen.add(photo['owner']['id'])
             filename = 'photos/'+args.participant_id+'/recent/'+photo['id']+'.jpg'
-            photo.save(filename, size_label = 'Medium')
+            photo.save(filename, size_label = 'Small')
             recent_filenames.append(filename)
         if len(recent_filenames) >= args.num_photos_per_list:
             break
@@ -93,7 +93,7 @@ if __name__=='__main__':
         if photo['owner']['id'] not in int_ids_seen:
             int_ids_seen.add(photo['owner']['id'])
             filename = 'photos/'+args.participant_id+'/interesting/'+photo['id']+'.jpg'
-            photo.save(filename, size_label = 'Medium')
+            photo.save(filename, size_label = 'Small')
             int_filenames.append(filename)
         if len(int_filenames) >= args.num_photos_per_list:
             break
