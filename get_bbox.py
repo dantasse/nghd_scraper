@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-# Scrapes a whole city from Flickr.
+# Given a neighborhood geojson file, and a neighborhood name, prints to stdout
+# a bounding box of coordinates around it.
 
 import argparse, csv, collections, ConfigParser, tqdm, flickr_api
 from jinja2 import Environment, PackageLoader, Template

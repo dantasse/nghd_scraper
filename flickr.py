@@ -2,7 +2,7 @@
 
 # Scrapes a whole city from Flickr.
 
-import argparse, csv, collections, ConfigParser, tqdm, flickr_api
+import argparse, csv, collections, ConfigParser, tqdm, flickr_api, os
 from jinja2 import Environment, PackageLoader, Template
 from shapely import geometry
 import util
@@ -11,12 +11,12 @@ parser.add_argument('--neighborhoods_file', default='data/sffind_neighborhoods.j
 parser.add_argument('--target_neighborhood', default='Noe Valley')
 parser.add_argument('--config_file', default='config.txt')
 parser.add_argument('--autotags_file', default='data/autotags.tsv')
-parser.add_argument('--num_photos_per_list', type=int, default=10)
+parser.add_argument('--num_photos_per_list', type=int, default=100)
 parser.add_argument('--participant_id', default='pdemo')
 args = parser.parse_args()
 
 config = ConfigParser.ConfigParser()
-config.read('config.txt')
+config.read(args.config_file)
 flickr_api.set_keys(api_key=config.get('flickr', 'api_key'), api_secret=config.get('flickr', 'api_secret'))
 # flickr_api.enable_cache()
 
@@ -58,6 +58,7 @@ if __name__=='__main__':
 
     recent_ids_seen = set() # so we get 1 per person
     recent_filenames = []
+    os.makedirs('photos/'+args.participant_id+'/recent/')
     for photo in tqdm.tqdm(recent_photos[0:args.num_photos_per_list*10]):
         loc = photo.getLocation()
         point = geometry.Point(loc['longitude'], loc['latitude'])
@@ -82,6 +83,7 @@ if __name__=='__main__':
     int_photos = flickr_api.Walker(flickr_api.Photo.search, bbox=bbox, sort='interestingness-desc')
     int_ids_seen = set()
     int_filenames = []
+    os.makedirs('photos/'+args.participant_id+'/interesting/')
     for photo in tqdm.tqdm(int_photos[0:args.num_photos_per_list*10]):
         loc = photo.getLocation()
         point = geometry.Point(loc['longitude'], loc['latitude'])
