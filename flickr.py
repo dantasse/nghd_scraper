@@ -2,55 +2,103 @@
 
 # Scrapes a whole city from Flickr.
 
-import argparse, csv, collections, geojson, ConfigParser, time
-import flickr_api
+import argparse, csv, collections, ConfigParser, tqdm, flickr_api, os
+from jinja2 import Environment, PackageLoader, Template
 from shapely import geometry
 import util
 parser = argparse.ArgumentParser()
 parser.add_argument('--neighborhoods_file', default='data/sffind_neighborhoods.json')
+parser.add_argument('--target_neighborhood', default='Noe Valley')
 parser.add_argument('--config_file', default='config.txt')
+parser.add_argument('--autotags_file', default='data/autotags.tsv')
+parser.add_argument('--num_photos_per_list', type=int, default=100)
+parser.add_argument('--participant_id', default='pdemo')
 args = parser.parse_args()
 
 config = ConfigParser.ConfigParser()
-config.read('config.txt')
+config.read(args.config_file)
 flickr_api.set_keys(api_key=config.get('flickr', 'api_key'), api_secret=config.get('flickr', 'api_secret'))
+# flickr_api.enable_cache()
 
-nghds = util.load_neighborhoods(args.neighborhoods_file)
+def convert_autotags_list(autotags_scores):
+    """ input: '[dog#0.95,cat#0.85,people#0.99]'. output: ['dog', 'people'] (b/c
+    only keeping autotags with scores > .9) """
+    if autotags_scores == '' or autotags_scores == '[]':
+        return []
+    items = autotags_scores.strip('[]').split(',')
+    return [item.split('#')[0] for item in items if float(item.split('#')[1])>.9]
 
-# photo = flickr_api.Photo.search(id=23719973823)
-# photos = flickr_api.Photo.getRecent()
-# for photo in photos:
-#     print photo
-#     for tag in photo.getInfo()['tags']:
-#         print tag
-    
-# exit()
-for nghd in nghds:
-    nghd_geom = geometry.asShape(nghd['geometry'])
-    bbox = nghd_geom.bounds # 4-tuple: (min lon, min lat, max lon, max lat)
-    if nghd['properties']['name']=='Noe Valley':
-        photos = flickr_api.Photo.search(bbox=str(bbox)[1:-1])
-        for photo in photos:
-            loc = photo.getLocation()
-            point = geometry.Point(loc['longitude'], loc['latitude'])
-            if not nghd_geom.contains(point):
-                # point is within convex hull but not actually in neighborhood.
-                continue
-            print photo['id']
-            info = photo.getInfo()
-            print info['tags']
-            for tag in info['tags']: # argh no autotags here.
-                print tag['id']
-                print tag['text']
-                # print tag.getRelated()
-            # print photo.getPhotoUrl()
-            # print photo.getPhotoFile()
-            # photo.save(photo['id'] + '.jpg') # this actually downloads the photo
-            # photo.save(photo['id'] + '.jpg', 'Medium') # saves 500px version
-            # TODO: get autotags... argh damn it's not part of Tags
+def generate_html_gallery(outfile_name, image_filenames):
+    """ Renders the gallery.html template so we have a bunch of images in one
+    html file. """
+    env = Environment(loader=PackageLoader('flickr', 'templates'))
+    template = env.get_template('gallery.html')
+    outfile = open(outfile_name, 'w')
+    outfile.write(template.render(urls=image_filenames))
+    outfile.close()
 
+if __name__=='__main__':
+    nghds = util.load_neighborhoods(args.neighborhoods_file)
+    autotags_file = csv.reader(open(args.autotags_file), delimiter='\t')
+    # photo_id, date, date_taken_unknown, lon, lat, tags
+    ids_autotags = {} # string -> list of autotags
+    for line in autotags_file:
+        autotags_list = convert_autotags_list(line[5])
+        ids_autotags[line[0]] = autotags_list
 
- 
+    for nghd in nghds:
+        if nghd['properties']['name'].lower() == args.target_neighborhood.lower():
+            nghd_of_interest = nghd
 
+    nghd_geom = geometry.asShape(nghd_of_interest['geometry'])
+    bbox = str([round(b, 6) for b in nghd_geom.bounds])[1:-1]
+    # 4-tuple: (min lon, min lat, max lon, max lat). [1:-1] to remove parentheses.
+    # recent_photos = flickr_api.Photo.search(bbox=bbox, sort='date-taken-desc')
+    recent_photos = flickr_api.Walker(flickr_api.Photo.search, bbox=bbox, sort='date-taken-desc')
+
+    recent_ids_seen = set() # so we get 1 per person
+    recent_filenames = []
+    os.makedirs('photos/'+args.participant_id+'/recent/')
+    for photo in tqdm.tqdm(recent_photos[0:args.num_photos_per_list*10]):
+        loc = photo.getLocation()
+        point = geometry.Point(loc['longitude'], loc['latitude'])
+        if not nghd_geom.contains(point):
+            # point is within bounding box but not actually in neighborhood.
+            continue
+        
+        if photo['id'] in ids_autotags:
+            autotags = ids_autotags[photo['id']]
+        else:
+            autotags = []
+
+        if photo['owner']['id'] not in recent_ids_seen:
+            recent_ids_seen.add(photo['owner']['id'])
+            filename = 'photos/'+args.participant_id+'/recent/'+photo['id']+'.jpg'
+            photo.save(filename, size_label = 'Small')
+            recent_filenames.append(filename)
+        if len(recent_filenames) >= args.num_photos_per_list:
+            break
+    generate_html_gallery(args.participant_id + "_recent.html", recent_filenames)
+
+    int_photos = flickr_api.Walker(flickr_api.Photo.search, bbox=bbox, sort='interestingness-desc')
+    int_ids_seen = set()
+    int_filenames = []
+    os.makedirs('photos/'+args.participant_id+'/interesting/')
+    for photo in tqdm.tqdm(int_photos[0:args.num_photos_per_list*10]):
+        loc = photo.getLocation()
+        point = geometry.Point(loc['longitude'], loc['latitude'])
+        if not nghd_geom.contains(point):
+            # point is within bounding box but not actually in neighborhood.
+            continue
+        # autotags = ids_autotags[int(photo['id'])]
+
+        if photo['owner']['id'] not in int_ids_seen:
+            int_ids_seen.add(photo['owner']['id'])
+            filename = 'photos/'+args.participant_id+'/interesting/'+photo['id']+'.jpg'
+            photo.save(filename, size_label = 'Small')
+            int_filenames.append(filename)
+        if len(int_filenames) >= args.num_photos_per_list:
+            break
+    generate_html_gallery(args.participant_id + "_interesting.html", int_filenames)
 
 
