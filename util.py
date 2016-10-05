@@ -21,4 +21,8 @@ def load_neighborhoods(filename):
             nghd['properties']['name'] = nghd['properties']['neighborho']
         if 'hood' in nghd['properties']:
             nghd['properties']['name'] = nghd['properties']['hood']
+        if 'NTAName' in nghd['properties']: # nynta
+            nghd['properties']['name'] = nghd['properties']['NTAName']
+        if 'PO_NAME' in nghd['properties']: # bayarea_zipcodes
+            nghd['properties']['name'] = nghd['properties']['PO_NAME']
     return nghds['features']

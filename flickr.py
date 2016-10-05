@@ -5,14 +5,16 @@
 import argparse, csv, collections, ConfigParser, tqdm, flickr_api, os
 from jinja2 import Environment, PackageLoader, Template
 from shapely import geometry
+import flickr_api.flickrerrors
+from flickr_api.flickrerrors import FlickrAPIError
 import util
 parser = argparse.ArgumentParser()
-parser.add_argument('--neighborhoods_file', default='data/sffind_neighborhoods.json')
-parser.add_argument('--target_neighborhood', default='Noe Valley')
+parser.add_argument('--neighborhoods_file', default='data/Pittsburgh_Neighborhoods.geojson')
+parser.add_argument('--target_neighborhood', default='Squirrel Hill North')
 parser.add_argument('--config_file', default='config.txt')
-parser.add_argument('--autotags_file', default='data/autotags.tsv')
+parser.add_argument('--autotags_file', default='data/all_pgh_autotags.tsv', help='does not do anything yet')
 parser.add_argument('--num_photos_per_list', type=int, default=100)
-parser.add_argument('--participant_id', default='pdemo')
+parser.add_argument('--participant_id', default='pdemo', help='folder name to store their stuff in, anyway')
 args = parser.parse_args()
 
 config = ConfigParser.ConfigParser()
@@ -47,8 +49,12 @@ if __name__=='__main__':
         ids_autotags[line[0]] = autotags_list
 
     for nghd in nghds:
+        if 'name' not in nghd['properties']:
+            continue
         if nghd['properties']['name'].lower() == args.target_neighborhood.lower():
             nghd_of_interest = nghd
+    if not nghd_of_interest:
+        print 'Neighborhood not found: %s' % args.target_neighborhood
 
     nghd_geom = geometry.asShape(nghd_of_interest['geometry'])
     bbox = str([round(b, 6) for b in nghd_geom.bounds])[1:-1]
@@ -59,25 +65,32 @@ if __name__=='__main__':
     recent_ids_seen = set() # so we get 1 per person
     recent_filenames = []
     os.makedirs('photos/'+args.participant_id+'/recent/')
-    for photo in tqdm.tqdm(recent_photos[0:args.num_photos_per_list*10]):
-        loc = photo.getLocation()
-        point = geometry.Point(loc['longitude'], loc['latitude'])
-        if not nghd_geom.contains(point):
-            # point is within bounding box but not actually in neighborhood.
-            continue
-        
-        if photo['id'] in ids_autotags:
-            autotags = ids_autotags[photo['id']]
-        else:
-            autotags = []
+    try:
+        for photo in tqdm.tqdm(recent_photos[0:args.num_photos_per_list*10]):
+            try:
+                loc = photo.getLocation()
+                point = geometry.Point(loc['longitude'], loc['latitude'])
+                if not nghd_geom.contains(point):
+                    # point is within bounding box but not actually in neighborhood.
+                    continue
+                
+                if photo['id'] in ids_autotags:
+                    autotags = ids_autotags[photo['id']]
+                else:
+                    autotags = []
 
-        if photo['owner']['id'] not in recent_ids_seen:
-            recent_ids_seen.add(photo['owner']['id'])
-            filename = 'photos/'+args.participant_id+'/recent/'+photo['id']+'.jpg'
-            photo.save(filename, size_label = 'Small')
-            recent_filenames.append(filename)
-        if len(recent_filenames) >= args.num_photos_per_list:
-            break
+                if photo['owner']['id'] not in recent_ids_seen:
+                    recent_ids_seen.add(photo['owner']['id'])
+                    filename = 'photos/'+args.participant_id+'/recent/'+photo['id']+'.jpg'
+                    photo.save(filename, size_label = 'Small')
+                    recent_filenames.append(filename)
+                if len(recent_filenames) >= args.num_photos_per_list:
+                    break
+            except FlickrAPIError:
+                print "caught an error"
+                pass # sometimes we'll miss a photo I guess
+    except IndexError:
+        pass # ran out of photos
     generate_html_gallery(args.participant_id + "_recent.html", recent_filenames)
 
     int_photos = flickr_api.Walker(flickr_api.Photo.search, bbox=bbox, sort='interestingness-desc')
